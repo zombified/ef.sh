@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <meta http-equiv="Content-Style-Type" content="text/css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="date" content="$date-meta$" />
+    <title>$title$ | Example Site</title>
+    $for(header-includes)$
+    $header-includes$
+    $endfor$
+</head>
+<body>
+    <div class='page'>
+        <header class='site-header'>
+            <h1>$if(title)$$title$$else$Example Site$endif$</h1>
+            $for(include-before)$
+            $include-before$
+            $endfor$
+        </header>
+        <article class='content'>
+            $body$
+        </article>
+    </div>
+    <footer class='site-footer'>
+        <div class='content'>
+            $for(include-after)$
+            $include-after$
+            $endfor$
+        </div>
+    </footer>
+</body>
+</html>

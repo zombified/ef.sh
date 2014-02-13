@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+    <title>Example Site</title>
+    <subtitle>Example site description</subtitle>
+    <link rel="self">http://example.com/atom.xml</link>
+    <link>http://example.com</link>
