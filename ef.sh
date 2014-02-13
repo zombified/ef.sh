@@ -1,5 +1,7 @@
 #!/bin/bash
 
+VERSION="0.0.1"
+
 # The MIT License (MIT)
 #
 # Copyright (c) 2014 Joel Kleier
@@ -165,10 +167,10 @@ BUILD_T=$(timer)
 
 
 # --- COMMAND OPTIONS ---------------------------------------------------------
-while getopts :hc opt; do
+while getopts :hcv opt; do
     case "${opt}" in
         h)
-            echo "Usage: $0 [-h] [-c]"
+            echo "Usage: $0 [-h] [-c] [-v]"
             exit 0
             ;;
         c)
@@ -176,6 +178,10 @@ while getopts :hc opt; do
             echo -n "Clearing cache..."
             rm -rf $cache_dir
             echo "DONE [$(timer ${CLEARCACHE_T})]"
+            ;;
+        v)
+            echo "$(basename $0) version $VERSION"
+            exit 0
             ;;
         *)
             ;;
