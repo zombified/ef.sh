@@ -1,6 +1,7 @@
 #!/bin/bash
 
-VERSION="0.0.1"
+VERSION="0.0.2"
+# changelog at end of file
 
 # The MIT License (MIT)
 #
@@ -45,6 +46,8 @@ VERSION="0.0.1"
 #   - interesting-things.md
 #   - rss.xml.part -- front matter for the rss.xml document
 #   - atom.xml.part -- front matter for the atom.xml document
+#   - favicon.ico
+#   - favicon.png
 #
 # File Structure of Output:
 #   - blog/
@@ -59,6 +62,8 @@ VERSION="0.0.1"
 #   - index.html -- short intro + recent posts
 #   - rss.xml
 #   - atom.xml
+#   - favicon.ico
+#   - favicon.png
 
 
 
@@ -455,5 +460,28 @@ printf "</feed>" >> "${output_atom}"
 echo "DONE. [$(timer ${FEED_T})]"
 
 
+# copy misc files to output
+CPY_T=$(timer)
+echo -n "Copying remaining files to output..."
+
+cp "${project_dir}/favicon.ico" "${output_dir}"
+cp "${project_dir}/favicon.png" "${output_dir}"
+
+echo "DONE. [$(timer ${CPY_T})]"
+
+
 echo "Build Completed. [$(timer ${BUILD_T})]"
 
+# CHANGES
+# =======
+#
+# 0.0.2
+# -----
+# - added rss links to head
+# - adjusted some of the meta tags in head
+# - added favicon to template
+#
+# 0.0.1
+# -----
+# Initial release
+#
