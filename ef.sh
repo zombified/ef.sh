@@ -230,7 +230,7 @@ do
     POST_filename=$(basename "$file" .md)
 
     # grab just the md5 hash
-    POST_md5=$(md5sum $file | awk '{print substr($0,0,33)}')
+    POST_md5=$(md5sum $file | awk '{print substr($0,0,32)}')
     if grep -q "$POST_md5" $cache_processed; then
         echo "...${POST_filename} UNCHANGED. [$(timer ${POST_t})]"
         continue
