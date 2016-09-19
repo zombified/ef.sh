@@ -5,7 +5,7 @@ This is a bash utility intended to facilitate the generation of a static website
 A prime example is [joelkleier.com](https://joelkleier.com) -- the main motivation
 for the tool to exist in the first place.
 
-Version 2.x is significantly different than veersion 1.x -- take a look at the
+Version 2.x is significantly different than version 1.x -- take a look at the
 [1.x branch](https://github.com/zombified/ef.sh/tree/1.x) if you're curious how
 the first version worked.
 
