@@ -10,7 +10,7 @@ Version 2.x is significantly different than version 1.x -- take a look at the
 the first version worked.
 
 The `someplace.com` folder in this repo is an example of a _very_ basic site
-generated with this tool.
+that can be generated with this tool.
 
 ## pre-reqs:
 
