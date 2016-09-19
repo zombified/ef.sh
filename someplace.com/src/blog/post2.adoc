@@ -2,7 +2,6 @@
 title: Example ASCIIDoc post
 date: 2016-07-02T00:00:00.01-05:00
 description: an ascii doc example
-tags: [post]
 ---
 
 This is just an asciidoc formatted blog post.

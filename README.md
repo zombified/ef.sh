@@ -1,27 +1,79 @@
-The `ef.sh` script is the actual tool I use to generate my personal website
-at [joelkleier.com](http://joelkleier.com).
+# ef.sh
 
-All the other files in this are example documents based off of my personal
-site (but should contain only example data).
+This is a bash utility for generating my personal site at [joelkleier.com](https://joelkleier.com).
 
-You'll need Bash, a linux or unix system, and
-[pandoc](http://johnmacfarlane.net/pandoc/) installed if you'd like to play
-around with it.
+Version 2.x is significantly different than veersion 1.x -- take a look at the
+[1.x branch](https://github.com/zombified/ef.sh/tree/1.x) if you're curious how
+the first version worked.
 
-If you're running ubuntu, it'd simply be:
+The `someplace.com` folder in this repo is an example of a _very_ basic site
+generated with this tool.
 
-    $ sudo apt-get install pandoc
-    $ ./ef.sh
+## pre-reqs:
 
-If you're running a unix, then you might need to fiddle with some of the `date`
-commands used in `ef.sh`.
+You need this installed:
 
-Here are the parameters/options you can pass into the `ef.sh` script:
+  * [shyaml](https://pypi.python.org/pypi/shyaml) for reading yaml front matter
+  * GNU `date` from the coreutils project (usually installed by default on linux machines, on OS X coreutils needs to be installed with brew or equivalent)
 
-  * **-h** displays command usage info
-  * **-c** clears cache for a complete rebuild (if a template is changed, you
-    should use this)
-  * **-v** print the version of the script
+The default configuration is setup to expect the following:
+
+  * [asciidoctor](http://asciidoctor.org/) for asciidoc formatted files
+  * [pandoc](http://pandoc.org/) for markdown and many other formats
+
+## Basic usage
+
+The help should be pretty explanitory for the command usage:
+
+    $ ef.sh help
+    Version: 2.0.0
+
+    USAGE
+    -----
+    ef.sh help    -- print this help text
+    ef.sh build   -- build files that have changed since last run
+    ef.sh fresh   -- rebuild entire site regardless of timestamps
+    ef.sh init    -- generate a default efshrc and template files in the $PWD
+                        (this operation will overwrite any existing files)
+    -----
+    The script looks for a efshrc file in the $PWD
+    The script requires 'asciidoctor' (by default) to be installed and available on your PATH for asciidoc support.
+    The script requires 'pandoc' (by default) to be installed and available on your PATH for markdown support.
+    The script requires 'shyaml' to be installed. 'pip install shyaml'
+    The script requires the coreutils GNU date command, on OS X 'brew install coreutils' and set EFSH_DATE_CMD to 'gdate' in your efshrc
+
+## Configuration
+
+The basic principle of the utility is:
+
+  1. scan the PWD directory recursively
+  2. pass each file through a mapped handler (mapped via file extension)
+     * if no handler for a file, the file is ignored
+
+There are some built-in handlers:
+
+  * pandoc -- mapped to *.md by default
+  * asciidoctor -- mapped to *.adoc by default
+  * copy -- mapped, by default, to *.css, *.js, *.gif, *.jpg, *.jpeg, *.png, *.svg, and *.html
+  * blogindex -- mapped, by default, to *.blogindex
+  * siteindex -- mapped, by default, to *.siteindex
+  * rssatom -- mapped, by default, to *.rssatom
+
+All of these handlers are defined as a set of bash methods with specially
+formatted names.
+
+You associate a handler with a file extension in a sites `efshrc` file.
+
+
+## TODO's
+
+  1. make a way to specify a default handler for unknown filetypes
+  2. make generated items the rss/atom handler be generated from templates instead of being hardcoded
+  3. make a blog index item generated from a template instead of being hardcoded
+  4. make it so handlers can be modularized in some fashion
+  5. consider the possibility of doing something with tags
+
+See anything else that you think should be added, changed, or fixed? Create an issue!
 
 Enjoy! or don't...
 

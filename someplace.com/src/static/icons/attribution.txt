@@ -1,0 +1,5 @@
+Icons from: http://www.toicon.com/series/blueprint
+"Blueprint" by Shannon E Thomas
+CC 4.0 International (with Attribution)
+Including:
+- /static/icons/blueprint_speak.svg

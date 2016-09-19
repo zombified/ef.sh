@@ -2,7 +2,6 @@
 title: Post1
 date: 2016-09-18T00:00:00.01-05:00
 description: An example posting
-tags: [post, generic]
 ---
 
 # some markdown

@@ -2,10 +2,6 @@
 
 EFSH_VERSION=2.0.0
 
-# TODO:
-#   - make 'index.blogindex' a little more generic?
-#   - tags?
-#
 
 # $1 file get yaml frontmatter from
 efsh_get_yaml_frontmatter() {
@@ -322,8 +318,8 @@ efsh_loadconfig() {
     EFSH_SRC_DIR=$PWD/src
     EFSH_BUILD_DIR=$PWD/build
     EFSH_LASTGEN=$PWD/.lastgen
-    EFSH_EXT=(".md" ".adoc" ".css" ".js" ".gif" ".jpg" ".jpeg" ".png" ".svg" ".html" ".blogindex" ".rssatom" ".siteindex" ".xcf" ".txt" ".ttf" ".bfxrsound" ".wav")
-    EFSH_EXT_HANDLERS=(pandoc asciidoctor copy copy copy copy copy copy copy copy blogindex rssatom siteindex copy copy copy copy copy)
+    EFSH_EXT=(".md" ".adoc" ".css" ".js" ".gif" ".jpg" ".jpeg" ".png" ".svg" ".html" ".blogindex" ".rssatom" ".siteindex")
+    EFSH_EXT_HANDLERS=(pandoc asciidoctor copy copy copy copy copy copy copy copy blogindex rssatom siteindex)
     EFSH_TMPL_HEAD=$PWD/tmpl_head.html
     EFSH_TMPL_TAIL=$PWD/tmpl_tail.html
     EFSH_TMPL_IHEAD=$PWD/tmpl_ihead.html
@@ -382,8 +378,8 @@ efsh_init() {
 #EFSH_BUILD_DIR=\$PWD/build
 #EFSH_BUILD_DIR=\$PWD/build
 #EFSH_LASTGEN=\$PWD/.lastgen
-#EFSH_EXT=(".md" ".adoc" ".css" ".js" ".gif" ".jpg" ".jpeg" ".png" ".svg" ".html" ".blogindex" ".rssatom" ".siteindex" ".xcf" ".txt" ".ttf" ".bfxrsound" ".wav")
-#EFSH_EXT_HANDLERS=(pandoc asciidoctor copy copy copy copy copy copy copy copy blogindex rssatom siteindex copy copy copy copy copy)
+#EFSH_EXT=(".md" ".adoc" ".css" ".js" ".gif" ".jpg" ".jpeg" ".png" ".svg" ".html" ".blogindex" ".rssatom" ".siteindex")
+#EFSH_EXT_HANDLERS=(pandoc asciidoctor copy copy copy copy copy copy copy copy blogindex rssatom siteindex)
 #EFSH_TMPL_HEAD=\$PWD/tmpl_head.html
 #EFSH_TMPL_TAIL=\$PWD/tmpl_tail.html
 #EFSH_TMPL_IHEAD=\$PWD/tmpl_ihead.html
