@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+    <title>Some Place</title>
+    <subtitle>A place of stuff</subtitle>
+    <link href="https://someplace.com/atom.xml" rel="self" />
+    <link href="https://someplace.com" />
+    <id>https://someplace.com</id>
+    <updated>{{updated}}</updated>
+{{entries}}
+</feed>

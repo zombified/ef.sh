@@ -1,487 +1,546 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-VERSION="0.0.2"
-# changelog at end of file
+EFSH_VERSION=2.0.0
 
-# The MIT License (MIT)
+# TODO:
+#   - make 'index.blogindex' a little more generic?
+#   - tags?
 #
-# Copyright (c) 2014 Joel Kleier
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
 
+# $1 file get yaml frontmatter from
+efsh_get_yaml_frontmatter() {
+    local infile=$1
 
-# Future things that I'd like TODO:
-#   - clean cache of old post md5's that are no longer used
-#   - incremental build of tag, archive, interesting things, index, and feed
-#   - create feed.xml files for all tags
-#   - notice if template(s) change and rebuild they have
+    local yaml=$(cat $infile | sed -n -e '/---/,/---/p' | tail -n +2 | sed \$d)
 
+    echo "$yaml"
+}
 
-# File Structure of Input:
-#   - theme/
-#       - res/ -- for non-template resources like css, javascript or images
-#       - head.html -- for things that go in the <head> of the template
-#       - header.html -- for things that go in the header portion of your content
-#       - template.html -- the full template for each page on the site
-#       - footer.html -- for thigns that go in the footer portion of your content
-#   - blog/
-#       - 2014-01-foo-bar.md -- the first several lines should be yaml front matter
-#   - index.md
-#   - interesting-things.md
-#   - rss.xml.part -- front matter for the rss.xml document
-#   - atom.xml.part -- front matter for the atom.xml document
-#   - favicon.ico
-#   - favicon.png
-#
-# File Structure of Output:
-#   - blog/
-#       - tag/
-#           - brewing/
-#               - index.html -- lists preview for each entry in tag
-#           - index.html -- lists all tags used
-#       - archive/index.html
-#       - 2014-01-foo-bar/index.html
-#   - theme/ -- direct recusive copy of theme/res from input
-#   - interesting-things/index.html
-#   - index.html -- short intro + recent posts
-#   - rss.xml
-#   - atom.xml
-#   - favicon.ico
-#   - favicon.png
+# $1 file get content from
+efsh_get_content() {
+    local infile=$1
 
+    local filecontent=$(cat $infile | sed -e '1,/---/d')
 
+    echo "$filecontent"
+}
 
-
-# --- CONFIGURATION -----------------------------------------------------------
-site_base_url=""
-site_fullbase_url="http://joelkleier.com"
-post_base_url="${site_base_url}/blog"
-post_fullbase_url="${site_fullbase_url}/blog"
-project_dir=/home/diode/web/ef
-post_dir=${project_dir}/blog
-index_file=${project_dir}/index.md
-interestingthings_file=${project_dir}/interesting-things.md
-rsspart_file=${project_dir}/rss.xml.part
-atompart_file=${project_dir}/atom.xml.part
-
-pandoc_theme_dir=${project_dir}/theme
-pandoc_theme_res_dir=${project_dir}/theme/res
-pandoc_theme_template=${pandoc_theme_dir}/template.html
-pandoc_theme_head=${pandoc_theme_dir}/head.html
-pandoc_theme_header=${pandoc_theme_dir}/header.html
-pandoc_theme_footer=${pandoc_theme_dir}/footer.html
-pandoc_opts="--standalone -f markdown -t html5 --include-in-head=${pandoc_theme_head} --include-before-body=${pandoc_theme_header} --include-after-body=${pandoc_theme_footer} --template=${pandoc_theme_template}"
-pandoc_opts_fragment="-f markdown -t html5"
-
-cache_dir=${project_dir}/.cache
-cache_current=${cache_dir}/current  # md5sum's for files already checked in current run
-cache_processed=${cache_dir}/processed  # md5sum's for files that have been preprocessed
-cache_tagset=${cache_dir}/tagset  # set of all tags, separated by new lines, used in all posts
-cache_tagsort_dir=${cache_dir}/tagsort  # directory to hold files with names of tags that contain post sortdate and md5
-cache_tagindex_dir=${cache_dir}/tagindex  # directory holding markdown index files for tags
-cache_alltagindex=${cache_dir}/alltagindex.md  # holds lists of posts for tags
-cache_sort=${cache_dir}/postsort  # sort dates and md5sums, one pair per row, for each post
-cache_recent=${cache_dir}/recent  # holds most recent posts' previews
-cache_post_dir=${cache_dir}/posts  # holds cache files for posts
-cache_archive=${cache_dir}/archive.md  # holds a list of all posts in blog
-
-output_dir=${project_dir}/output
-output_res_dir=${output_dir}/theme
-output_post_dir=${output_dir}/blog
-output_tag_dir=${output_post_dir}/tag
-output_archive_dir=${output_post_dir}/archive
-output_interestingthings_dir=${output_dir}/interesting-things
-output_rss=${output_dir}/rss.xml
-output_atom=${output_dir}/atom.xml
-
-
-# --- FUNCTIONS ---------------------------------------------------------------
-
-# based on http://www.linuxjournal.com/content/use-date-command-measure-elapsed-time
-# Elapsed time.  Usage:
-#
-#   t=$(timer)
-#   ... # do something
-#   printf 'Elapsed time: %s\n' $(timer $t)
-#      ===> Elapsed time: 0:01:12
-#
-#####################################################################
-# If called with no arguments a new timer is returned.
-# If called with arguments the first is used as a timer
-# value and the elapsed time is returned in the form HH:MM:SS.
-#
-function timer()
-{
-    if [[ $# -eq 0 ]]; then
-        echo $(date '+%s%3N')
+efsh_get_temp_file() {
+    # try to use a standard unix command to get the temp file, but otherwise
+    # use python if it's available
+    if hash mktemp 2>/dev/null ; then
+        mktemp
     else
-        local  stime=$1
-        etime=$(date '+%s%3N')
-
-        if [[ -z "$stime" ]]; then stime=$etime; fi
-
-        dt=$((etime - stime))
-        dn=$((dt % 1000))
-        ds=$(((dt / 1000) % 60))
-        dm=$((((dt / 1000) / 60) % 60))
-        dh=$(((dt / 1000) / 3600))
-        printf '%d:%02d:%02d.%03d' $dh $dm $ds $dn
-    fi
-}
-
-# based on http://stackoverflow.com/a/21189044
-# $1 == file
-# $2 == prefix to prepend to variables
-function parse_yaml {
-    local prefix=$2
-    local s='[[:space:]]*' w='[a-zA-Z0-9_]*' fs=$(echo @|tr @ '\034')
-    # grab the line number of the second '---' and pass everything in the file
-    # up to (and including) that line into the sed/awk commands to parse yaml
-    head -n $(grep -rne '---' $1 | sed -n '2 s/:---//p') $1 |
-    sed -ne "s|^\($s\)\($w\)$s:$s\"\(.*\)\"$s\$|\1$fs\2$fs\3|p" \
-        -e "s|^\($s\)\($w\)$s:$s\(.*\)$s\$|\1$fs\2$fs\3|p" |
-    awk -F$fs '{
-        indent = length($1)/2;
-        vname[indent] = $2;
-        for (i in vname) {if (i > indent) {delete vname[i]}}
-        if (length($3) > 0) {
-            vn=""; for (i=0; i<indent; i++) {vn=(vn)(vname[i])("_")}
-            printf("%s%s%s=\"%s\"\n", "'$prefix'",vn, $2, $3);
-        }
-    }'
-}
-
-
-BUILD_T=$(timer)
-
-
-# --- COMMAND OPTIONS ---------------------------------------------------------
-while getopts :hcv opt; do
-    case "${opt}" in
-        h)
-            echo "Usage: $0 [-h] [-c] [-v]"
-            exit 0
-            ;;
-        c)
-            CLEARCACHE_T=$(timer)
-            echo -n "Clearing cache..."
-            rm -rf $cache_dir
-            echo "DONE [$(timer ${CLEARCACHE_T})]"
-            ;;
-        v)
-            echo "$(basename $0) version $VERSION"
-            exit 0
-            ;;
-        *)
-            ;;
-    esac
-done
-
-
-# --- FILESYSTEM SETUP --------------------------------------------------------
-FSSETUP_T=$(timer)
-echo -n "Preparing filesystem..."
-
-# output
-rm -rf "${output_dir}"/*
-cp -R "${pandoc_theme_res_dir}" "${output_res_dir}"
-mkdir -p "${output_post_dir}"
-mkdir -p "${output_archive_dir}"
-mkdir -p "${output_interestingthings_dir}"
-
-# cache
-mkdir -p $cache_dir
-mkdir -p $cache_tagsort_dir
-mkdir -p $cache_tagindex_dir
-rm -rf $cache_tagindex_dir/*
-> $cache_current
-> $cache_recent
-> $cache_alltagindex
-> $cache_archive
-touch $cache_processed
-touch $cache_tagset
-touch $cache_sort
-
-echo "DONE. [$(timer ${FSSETUP_T})]"
-
-
-# --- PRE-PROCESS POSTS -------------------------------------------------------
-PREPROCESS_T=$(timer)
-echo "Pre-processing..."
-for file in `ls $post_dir/*.md`
-do
-    POST_t=$(timer)
-    POST_filename=$(basename "$file" .md)
-
-    # grab just the md5 hash
-    POST_md5=$(md5sum $file | awk '{print substr($0,0,32)}')
-    if grep -q "$POST_md5" $cache_processed; then
-        echo "...${POST_filename} UNCHANGED. [$(timer ${POST_t})]"
-        continue
-    fi
-    echo $POST_md5 >> $cache_current
-
-    # check to see if the file should be handled at all
-    if ! head -n 1 "$file" | grep -Eq "^---$"; then
-        echo "...${POST_filename} SKIPPED. [$(timer ${POST_t})]"
-        continue
-    fi
-
-    # set variables from post metadata
-    eval $(parse_yaml "$file" "POST_")
-
-    # create or update variables needed (ones not found in the metadata)
-    POST_sortdate=$(date -d "$POST_date" "+%Y%m%d")
-    POST_rssdate=$(date -d "$POST_date" "+%a, %d %b %Y 00:00:00 %Z")
-    POST_displaydate=$(date -d "$POST_date" "+%Y-%m-%d")
-    POST_tags=$(echo $POST_tags | sed 's/^\[//; s/\]$//;')
-    POST_url="${post_base_url}/${POST_filename}/"
-    POST_fullurl="${post_fullbase_url}/${POST_filename}/"
-
-    # create cache directory for rendered post data
-    POST_dir="${cache_post_dir}/${POST_md5}"
-    mkdir -p $POST_dir
-
-    # generate preview (html) and list snippet (markdown)
-    POST_listsnippet="  * [${POST_title}](${POST_url}) ${POST_displaydate}"
-    POST_preview="<article class='postpreview'><header><h1><a href='${POST_url}'>${POST_title}</a></h1></header><time class='date' datetime='${POST_rssdate}'>${POST_displaydate}</time><p>${POST_description}</p></article>"
-    echo "${POST_listsnippet}" > $POST_dir/listsnippet
-    echo ${POST_preview} > $POST_dir/preview
-
-    # generate html page for the post
-    #   the grep and sed statement get the number of lines used for metadata in the
-    #   post, and the tail statement only grabs the contents of the file after the
-    #   end of the metadata
-    mkdir -p "${POST_dir}/output/${POST_filename}/"
-    tail -n +$((2+$(grep -rne '---' "$file" | sed -n '2 s/:---//p'))) "$file" |
-    pandoc $pandoc_opts \
-        --output="${POST_dir}/output/${POST_filename}/index.html" \
-        --variable=title:"${POST_title}" \
-        --variable=fulldate:"${POST_rssdate}" \
-        --variable=displaydate:"${POST_displaydate}" \
-        --variable=tags:"${POST_tags}"
-    # generate a html snippet for just the post text
-    tail -n +$((2+$(grep -rne '---' "$file" | sed -n '2 s/:---//p'))) "$file" |
-    pandoc $pandoc_opts_fragment \
-        --output="${POST_dir}/htmlfragment" \
-        --variable=title:"${POST_title}" \
-        --variable=fulldate:"${POST_rssdate}" \
-        --variable=displaydate:"${POST_displaydate}" \
-        --variable=tags:"${POST_tags}"
-
-    # generate rss feed part (xml)
-    POST_html=$(cat "${POST_dir}/htmlfragment")
-    POST_rss="<item><title><![CDATA[${POST_title}]]></title><link>${POST_fullurl}</link><description><![CDATA[${POST_html}]]></description><pubDate>${POST_rssdate}</pubDate><guid isPermaLink='false'>${POST_fullurl}</guid></item>"
-    echo "${POST_rss}" > "${POST_dir}/rss"
-    POST_atom="<entry><title><![CDATA[${POST_title}]]></title><link>${POST_fullurl}</link><summary><![CDATA[${POST_html}]]></summary><updated>${POST_rssdate}</updated><id>${POST_md5}</id><author><name>Joel Kleier</name><email>joel@kleier.us</email></author></entry>"
-    echo "${POST_atom}" > "${POST_dir}/atom"
-
-    # process tags
-    oIFS="$IFS"
-    IFS=', ' read -a TAGS <<< "$POST_tags"
-    for element in "${TAGS[@]}"
-    do
-        # add to tag set, if it doesn't exist there yet
-        if ! grep -q "$element" "$cache_tagset"; then
-            echo "$element" >> $cache_tagset
+        if hash python 2>/dev/null ; then
+            echo "import tempfile ; temp = tempfile.NamedTemporaryFile() ; print(temp.name)" | python -
+        else
+            echo "ERROR: need python to make temp file because no 'mktemp' found"
+            exit 1
         fi
+    fi
+}
 
-        # create cached list snippet for post to tag's list
-        echo $POST_listsnippet > "${POST_dir}/tag_${element}"
+# $1 == `$EFSH_DATE_CMD` to format to YYYY-mm-dd
+efsh_format_date() {
+    # old stories tend to add milliseconds, so strip those first
+    local justdatetime=$(echo "$1" | sed -e 's/\..*//')
+    echo -n `$EFSH_DATE_CMD -d "$justdatetime" +%Y-%m-%d`
+}
 
-        # add post to tag's post list
-        touch "${cache_tagsort_dir}/${element}"
-        echo "${POST_sortdate}%%${POST_md5}" >> "${cache_tagsort_dir}/${element}"
+
+
+efsh_check_handler_pandoc() {
+    if ! hash pandoc 2>/dev/null ; then
+        echo "ERROR: pandoc command cannot be found"
+        exit 1
+    fi
+}
+
+efsh_check_handler_asciidoctor() {
+    if ! hash asciidoctor 2>/dev/null ; then
+        echo "ERROR: asciidoctor command cannot be found"
+        exit 1
+    fi
+}
+
+efsh_check_handler_copy() {
+    if ! hash cp 2>/dev/null ; then
+        echo "ERROR: cp command cannot be found"
+        exit 1
+    fi
+}
+
+efsh_check_handler_blogindex() {
+    return 0
+}
+
+efsh_check_handler_rssatom() {
+    return 0
+}
+
+efsh_check_handler_siteindex() {
+    return 0
+}
+
+
+# $1 == source directory
+# $2 == source filename (without extension)
+# $3 == source extension
+efsh_build_handler_asciidoctor() {
+    local fixed1=$1
+    fixed1="${fixed1:1:${#fixed1}-1}"
+    local infile="$EFSH_SRC_DIR/$fixed1/$2.$3"
+    local outdir="$EFSH_BUILD_DIR/$fixed1/$2"
+    local outfile="$outdir/index.html"
+    mkdir -p "$outdir"
+    shopt -s extglob; infile="${infile//+(\/)//}"
+    shopt -s extglob; outfile="${outfile//+(\/)//}"
+
+    local yamlfront=$(efsh_get_yaml_frontmatter "$infile")
+    local filecontent=$(efsh_get_content "$infile")
+
+    local efsh_title=$(echo "$yamlfront" | shyaml get-value title)
+    efsh_title=$(echo "$efsh_title" | sed 's/\//\\\//g')
+    local efsh_description=$(echo "$yamlfront" | shyaml get-value description)
+    efsh_description=$(echo "$efsh_description" | sed 's/\//\\\//g')
+    local efsh_date=$(echo "$yamlfront" | shyaml get-value date)
+    efsh_date=$(efsh_format_date "$efsh_date")
+
+    # ascii doc only converts files, so throw the contents into a temporary file
+    local tmpin=$(efsh_get_temp_file)
+    echo "$filecontent" > $tmpin
+
+    echo "[building (asciidoctor)] $fixed1/$2.$3 -> $fixed1/$2/index.html"
+    local output=$(asciidoctor -o - --no-header-footer "$tmpin")
+
+    local head=$(cat "$EFSH_TMPL_HEAD" | sed -e 's/{{title}}/'"${efsh_title}"'/g' -e 's/{{description}}/'"${efsh_description}"'/g' -e 's/{{date}}/'"${efsh_date}"'/g')
+    local tail=$(cat "$EFSH_TMPL_TAIL" | sed -e 's/{{title}}/'"${efsh_title}"'/g' -e 's/{{description}}/'"${efsh_description}"'/g' -e 's/{{date}}/'"${efsh_date}"'/g')
+    echo "$head" > "$outfile"
+    echo "${output}" >> "$outfile"
+    echo "$tail" >> "$outfile"
+
+    rm "$tmpin"
+}
+
+# $1 == source directory
+# $2 == source filename (without extension)
+# $3 == source extension
+efsh_build_handler_pandoc() {
+    local fixed1=$1
+    fixed1="${fixed1:1:${#fixed1}-1}"
+    local infile="$EFSH_SRC_DIR/$fixed1/$2.$3"
+    local outdir="$EFSH_BUILD_DIR/$fixed1/$2"
+    local outfile="$outdir/index.html"
+    mkdir -p "$outdir"
+    shopt -s extglob; infile="${infile//+(\/)//}"
+    shopt -s extglob; outfile="${outfile//+(\/)//}"
+
+    local yamlfront=$(efsh_get_yaml_frontmatter "$infile")
+    local filecontent=$(efsh_get_content "$infile")
+
+    local efsh_title=$(echo "$yamlfront" | shyaml get-value title)
+    efsh_title=$(echo "$efsh_title" | sed 's/\//\\\//g')
+    local efsh_description=$(echo "$yamlfront" | shyaml get-value description)
+    efsh_description=$(echo "$efsh_description" | sed 's/\//\\\//g')
+    local efsh_date=$(echo "$yamlfront" | shyaml get-value date)
+    efsh_date=$(efsh_format_date "$efsh_date")
+
+    echo "[building (pandoc)] $fixed1/$2.$3 -> $fixed1/$2/index.html"
+    local output=$(echo "$filecontent" | pandoc -f markdown -t html5)
+
+    local head=$(cat "$EFSH_TMPL_HEAD" | sed -e 's/{{title}}/'"${efsh_title}"'/g' -e 's/{{description}}/'"${efsh_description}"'/g' -e 's/{{date}}/'"${efsh_date}"'/g')
+    local tail=$(cat "$EFSH_TMPL_TAIL" | sed -e 's/{{title}}/'"${efsh_title}"'/g' -e 's/{{description}}/'"${efsh_description}"'/g' -e 's/{{date}}/'"${efsh_date}"'/g')
+    echo "$head" > "$outfile"
+    echo "${output}" >> "$outfile"
+    echo "$tail" >> "$outfile"
+}
+
+# $1 == source directory
+# $2 == source filename (without extension)
+# $3 == source extension
+efsh_build_handler_copy() {
+    local fixed1=$1
+    fixed1="${fixed1:1:${#fixed1}-1}"
+    local infile="$EFSH_SRC_DIR/$fixed1/$2.$3"
+    local outdir="$EFSH_BUILD_DIR/$fixed1"
+    local outfile="$outdir/$2.$3"
+    mkdir -p "$outdir"
+    shopt -s extglob; infile="${infile//+(\/)//}"
+    shopt -s extglob; outfile="${outfile//+(\/)//}"
+
+    echo "[building (copy)] $fixed1/$2.$3"
+    cp "$infile" "$outfile"
+}
+
+# $1 == source directory
+# $2 == source filename (without extension)
+# $3 == source extension
+efsh_build_handler_blogindex() {
+    local fixed1=$1
+    fixed1="${fixed1:1:${#fixed1}-1}"
+    local infile="$EFSH_SRC_DIR/$fixed1/$2.$3"
+    local outdir="$EFSH_BUILD_DIR/$fixed1"
+    local outfile="$outdir/index.html"
+    mkdir -p "$outdir"
+
+    if [ -e "$EFSH_LASTGEN" ] ; then
+        local newnames=$(eval "find $EFSH_SRC_DIR/$fixed1/ \( -name *.md -o -name *.adoc \) -newer \"$EFSH_LASTGEN\"")
+        local cntnn=0
+        for NN in ${newnames[@]} ; do
+            cntnn+=1
+        done
+        if [ "$cntnn" -le "0" ] ; then
+            echo "[building (blog index)] nothing changed, nothing to build."
+            return 0
+        fi
+    fi
+
+    echo "[building (blog index)] $fixed1/index.html"
+    local blogentries=$(find $EFSH_SRC_DIR/$fixed1/ \( -name *.md -o -name *.adoc \) | sort -r)
+    local output=""
+    for F in ${blogentries[@]} ; do
+        local frelpath=${F#$EFSH_SRC_DIR}
+        local ffolder=$(dirname $frelpath)
+        local ffilename=$(basename $frelpath)
+        local ffileext=${ffilename##*.}
+        local ffilename=${ffilename%.*}
+
+        local yamlfront=$(efsh_get_yaml_frontmatter "$F")
+        local posttitle=$(echo "$yamlfront" | shyaml get-value title)
+        local postdate=$(echo "$yamlfront" | shyaml get-value date)
+        postdate=$(efsh_format_date "$postdate")
+        local postdesc=$(echo "$yamlfront" | shyaml get-value description)
+
+        output+="<p><img class='linkicon' src='/static/icons/blueprint_speak.svg' /><a href='./${ffilename}/'>(${postdate}) ${posttitle}</a></p>\n"
+        output+="<p class='info'>${postdesc}</p>"
     done
-    IFS=$oIFS
 
-    # add post to all-post list
-    echo "${POST_sortdate}%%${POST_md5}" >> "${cache_sort}"
+    local efsh_title="BLOG"
+    local efsh_description=""
+    local efsh_date=$(date +%Y-%m-%d)
 
-    # mark it as having been pre-processed
-    echo $POST_md5 >> $cache_processed
+    local head=$(cat "$EFSH_TMPL_HEAD" | sed -e 's/{{title}}/'"${efsh_title}"'/g' -e 's/{{description}}/'"${efsh_description}"'/g' -e 's/{{date}}/'"${efsh_date}"'/g')
+    local tail=$(cat "$EFSH_TMPL_TAIL" | sed -e 's/{{title}}/'"${efsh_title}"'/g' -e 's/{{description}}/'"${efsh_description}"'/g' -e 's/{{date}}/'"${efsh_date}"'/g')
+    echo "$head" > "$outfile"
+    echo -e "${output}" >> "$outfile"
+    echo "$tail" >> "$outfile"
+}
 
-    echo "...${POST_filename} DONE [$(timer ${POST_t})]"
-done
-echo "Pre-processing DONE. [$(timer ${PREPROCESS_T})]"
+# $1 == source directory
+# $2 == source filename (without extension)
+# $3 == source extension
+efsh_build_handler_rssatom() {
+    local fixed1=$1
+    fixed1="${fixed1:1:${#fixed1}-1}"
+    local infile="$EFSH_SRC_DIR/$fixed1/$2.$3"
+    local outdir="$EFSH_BUILD_DIR"
+    local outfile_rss="$outdir/rss.xml"
+    local outfile_atom="$outdir/atom.xml"
+    mkdir -p "$outdir"
 
+    if [ -e "$EFSH_LASTGEN" ] ; then
+        local newnames=$(eval "find $EFSH_SRC_DIR/$fixed1/ \( -name *.md -o -name *.adoc \) -newer \"$EFSH_LASTGEN\"")
+        local cntnn=0
+        for NN in ${newnames[@]} ; do
+            cntnn+=1
+        done
+        if [ "$cntnn" -le "0" ] ; then
+            echo "[building (rss/atom)] nothing changed, nothing to build."
+            return 0
+        fi
+    fi
 
-# create index page
-IDXGEN_T=$(timer)
-echo -n "Generating site index..."
+    echo "[building (rss/atom feeds)] rss.xml"
+    local blogentries=$(find $EFSH_SRC_DIR/$fixed1/ \( -name *.md -o -name *.adoc \) | sort -r)
+    local outputrss=""
+    local outputatom=""
+    for F in ${blogentries[@]} ; do
+        local frelpath=${F#$EFSH_SRC_DIR}
+        local ffolder=$(dirname $frelpath)
+        local ffilename=$(basename $frelpath)
+        local ffileext=${ffilename##*.}
+        local ffilename=${ffilename%.*}
 
-## sort the file (most recent first), select the top 5, and then print out just the md5
-for postmd5 in $(sort -nr "${cache_sort}" | sed -n '1,5 p' | awk 'BEGIN{FS="%%"};{print $2 "\n"}')
-do
-    cat "${cache_post_dir}/${postmd5}/preview" >> $cache_recent
-done
-## combine the index.md and most recent into a single file, then convert it all
-## as a markdown document into it's output
-pandoc $pandoc_opts \
-    --output="$output_dir/index.html" \
-    --variable=title:"" \
-    $index_file $cache_recent
+        local yamlfront=$(efsh_get_yaml_frontmatter "$F")
+        local posttitle=$(echo "$yamlfront" | shyaml get-value title)
+        local postdate_fromfile=$(echo "$yamlfront" | shyaml get-value date | tr -d '\n')
+        postdate_fromfile=$(efsh_format_date "$postdate_fromfile")
+        # note, the '-R' is for --rfc-2822, which is a gnu date option
+        local postdate_rss=$($EFSH_DATE_CMD -d "$postdate_fromfile" -R)
+        local postdate_atom=$($EFSH_DATE_CMD -d "$postdate_fromfile" --rfc-3339='date')
+        local postdesc=$(echo "$yamlfront" | shyaml get-value description)
 
-echo "DONE. [$(timer $IDXGEN_T)]"
-
-
-# process all posts
-POSTGEN_T=$(timer)
-echo -n "Copying posts to output..."
-
-for postmd5 in $(sort -nr "${cache_sort}" | awk 'BEGIN{FS="%%"};{print $2 "\n"}')
-do
-    cp -R "${cache_post_dir}/${postmd5}/output/"* "${output_post_dir}"
-done
-
-echo "DONE. [$(timer $POSTGEN_T)]"
-
-
-# create tag indexes
-TAGIDXGEN_T=$(timer)
-echo "Creating tag indexes..."
-
-for file in `ls ${cache_tagsort_dir}`
-do
-    TAG=$(basename "$file")
-
-    TAGIDX_T=$(timer)
-    echo -n "...${TAG}"
-
-    # clear existing cache files
-    > "${cache_tagindex_dir}/${TAG}.md"
-
-    # add a heading for the tag
-    printf "\n\n## ${TAG}\n" >> "${cache_alltagindex}"
-
-    # create markdown file listing all posts
-    for postmd5 in $(sort -nr "${cache_tagsort_dir}/${TAG}" | awk 'BEGIN{FS="%%"};{print $2 "\n"}')
-    do
-        cat "${cache_post_dir}/${postmd5}/listsnippet" >> "${cache_tagindex_dir}/${TAG}.md"
-        cat "${cache_post_dir}/${postmd5}/listsnippet" >> "${cache_alltagindex}"
+        outputrss+="<item>\n\t<title><![CDATA[${posttitle}]]></title>\n\t<link>${EFSH_BASE_URL}/blog/${ffilename}</link>\n\t<description><![CDATA[${postdesc}]]></description>\n\t<pubDate>${postdate_rss}</pubDate>\n\t<guid>${EFSH_BASE_URL}/blog/${ffilename}</guid>\n</item>\n"
+        outputatom+="<entry>\n\t<title><![CDATA[${posttitle}]]></title>\n\t<link href='${EFSH_BASE_URL}/blog/${ffilename}' />\n\t<summary><![CDATA[${postdesc}]]></summary>\n\t<updated>${postdate_atom}</updated>\n\t<id>${EFSH_BASE_URL}/blog/${ffilename}</id>\n\t<author>\n\t\t<name>${EFSH_AUTHOR}</name>\n\t\t<email>${EFSH_EMAIL}</email>\n\t</author>\n</entry>\n"
     done
 
-    # make sure the output directory for the tag exists and is empty
-    mkdir -p "${output_tag_dir}/${TAG}"
-    rm -rf "${output_tag_dir}/${TAG}/"*
+    local efsh_date=$(echo -n `$EFSH_DATE_CMD --rfc-3339='date'`)
 
-    # generate the index.html file for the tag
-    pandoc $pandoc_opts \
-        --output="${output_tag_dir}/${TAG}/index.html" \
-        --variable=title:"${TAG}" \
-        "${cache_tagindex_dir}/${TAG}.md"
+    # note: need to use non '/' in sed since output's will have them
+    local rss=$(cat "$EFSH_TMPL_RSS" | sed -e 's|{{items}}|'"${outputrss}"'|g')
+    local atom=$(cat "$EFSH_TMPL_ATOM" | sed -e 's|{{updated}}|'"${efsh_date}"'|g' -e 's|{{entries}}|'"${outputatom}"'|g') > "$outfile_atom"
+    echo "$rss" > "$outfile_rss"
+    echo "$atom" > "$outfile_atom"
+}
 
-    echo " DONE. [$(timer $TAGIDX_T)]"
-done
+# $1 == source directory
+# $2 == source filename (without extension)
+# $3 == source extension
+efsh_build_handler_siteindex() {
+    local fixed1=$1
+    fixed1="${fixed1:1:${#fixed1}-1}"
+    local infile="$EFSH_SRC_DIR/$fixed1/$2.$3"
+    local outdir="$EFSH_BUILD_DIR"
+    local outfile="$outdir/index.html"
+    mkdir -p "$outdir"
 
-# generate the all-tag index
-ALLTAGIDX_T=$(timer)
-echo -n "Creating all-tag index..."
+    echo "[building (siteindex)] $fixed1/$2.$3 -> $fixed1/$2.html"
+    local output=$(cat $infile)
 
-pandoc $pandoc_opts \
-    --output="${output_tag_dir}/index.html" \
-    --variable=title:"Tags" \
-    "${cache_alltagindex}"
+    local efsh_title=''
 
-echo "DONE. [$(timer $ALLTAGIDX_T)]"
+    local head=$(cat "$EFSH_TMPL_IHEAD" | sed -e 's/{{title}}/'"${efsh_title}"'/g')
+    local tail=$(cat "$EFSH_TMPL_ITAIL")
+    echo "$head" > "$outfile"
+    echo "${output}" >> "$outfile"
+    echo "$tail" >> "$outfile"
+}
 
-echo "DONE creating tag indexes. [$(timer $TAGIDXGEN_T)]"
-
-
-# generate archive page (list of all posts)
-ARCHIVE_T=$(timer)
-echo -n "Creating archive index..."
-
-for postmd5 in $(sort -nr "${cache_sort}" | awk 'BEGIN{FS="%%"};{print $2 "\n"}')
-do
-    cat "${cache_post_dir}/${postmd5}/listsnippet" >> "${cache_archive}"
-done
-
-pandoc $pandoc_opts \
-    --output="${output_archive_dir}/index.html" \
-    --variable=title:"Archive" \
-    "${cache_archive}"
-
-echo "DONE. [$(timer $ARCHIVE_T)]"
+# CONFIGURE
+efsh_loadconfig() {
+    if ! hash shyaml 2>/dev/null ; then
+        echo "ERROR: 'shyaml' not installed. 'pip install shyaml'"
+        exit 1
+    fi
 
 
-# generate interesting-things page
-INTTHINGS_T=$(timer)
-echo -n "Creating interesting things index..."
+    # defaults
+    EFSH_AUTHOR="Some Body"
+    EFSH_EMAIL="somebody@someplace.com"
+    EFSH_BASE_URL="https://someplace.com"
+    EFSH_DATE_CMD=date
+    EFSH_SRC_DIR=$PWD/src
+    EFSH_BUILD_DIR=$PWD/build
+    EFSH_LASTGEN=$PWD/.lastgen
+    EFSH_EXT=(".md" ".adoc" ".css" ".js" ".gif" ".jpg" ".jpeg" ".png" ".svg" ".html" ".blogindex" ".rssatom" ".siteindex" ".xcf" ".txt" ".ttf" ".bfxrsound" ".wav")
+    EFSH_EXT_HANDLERS=(pandoc asciidoctor copy copy copy copy copy copy copy copy blogindex rssatom siteindex copy copy copy copy copy)
+    EFSH_TMPL_HEAD=$PWD/tmpl_head.html
+    EFSH_TMPL_TAIL=$PWD/tmpl_tail.html
+    EFSH_TMPL_IHEAD=$PWD/tmpl_ihead.html
+    EFSH_TMPL_ITAIL=$PWD/tmpl_itail.html
+    EFSH_TMPL_RSS=$PWD/tmpl_rss.xml
+    EFSH_TMPL_ATOM=$PWD/tmpl_atom.xml
 
-pandoc $pandoc_opts \
-    --output="${output_interestingthings_dir}/index.html" \
-    --variable=title:"Interesting Things" \
-    "${interestingthings_file}"
+    # load local config
+    if [ -e "$PWD/efshrc" ] ; then
+        source "$PWD/efshrc"
+    fi
 
-echo "DONE. [$(timer $INTTHINGS_T)]"
-
-
-# generate rss/atom feeds
-FEED_T=$(timer)
-echo -n "Creating site rss and atom feed..."
-
-## copy some static parts
-cp "$rsspart_file" "$output_rss"
-cp "$atompart_file" "$output_atom"
-
-## put pub date and other needed date related meta tags
-printf "<lastBuildDate>$(date "+%a, %d %b %Y %H:%M:%S %Z")</lastBuildDate>" >> "$output_rss"
-printf "<pubDate>$(date "+%a, %d %b %Y %H:%M:%S %Z")</pubDate>" >> "$output_rss"
-printf "<updated>$(date "+%a, %d %b %Y %H:%M:%S %Z")</updated>" >> "$output_atom"
-
-## put most recent 10 items into feed
-for postmd5 in $(sort -nr "${cache_sort}" | sed -n '1,10 p' | awk 'BEGIN{FS="%%"};{print $2 "\n"}')
-do
-    cat "${cache_post_dir}/${postmd5}/rss" >> "${output_rss}"
-    cat "${cache_post_dir}/${postmd5}/atom" >> "${output_atom}"
-done
-
-## close feed up
-printf "</channel></rss>" >> "${output_rss}"
-printf "</feed>" >> "${output_atom}"
-
-echo "DONE. [$(timer ${FEED_T})]"
+    # check to make sure all extensions can be handled
+    for handler in ${EFSH_EXT_HANDLERS[@]}; do
+        if ! hash $handler 2>/dev/null ; then
+            if ! eval "efsh_check_handler_$handler" ; then
+                exit 1
+            fi
+        fi
+    done
+}
 
 
-# copy misc files to output
-CPY_T=$(timer)
-echo -n "Copying remaining files to output..."
+# HELP
+efsh_help() {
+    echo "Version: ${EFSH_VERSION}"
+    echo ""
+    echo "USAGE"
+    echo "-----"
+    echo "${0##*/} help    -- print this help text"
+    echo "${0##*/} build   -- build files that have changed since last run"
+    echo "${0##*/} fresh   -- rebuild entire site regardless of timestamps"
+    echo "${0##*/} init    -- generate a default efshrc and template files in the \$PWD"
+    echo "                    (this operation will overwrite any existing files)"
+    echo "-----"
+    echo "The script looks for a efshrc file in the \$PWD"
+    echo "The script requires 'asciidoctor' (by default) to be installed and available on your PATH for asciidoc support."
+    echo "The script requires 'pandoc' (by default) to be installed and available on your PATH for markdown support."
+    echo "The script requires 'shyaml' to be installed. 'pip install shyaml'"
+    echo "The script requires the coreutils GNU date command, on OS X 'brew install coreutils' and set EFSH_DATE_CMD to 'gdate' in your efshrc"
+}
 
-cp "${project_dir}/favicon.ico" "${output_dir}"
-cp "${project_dir}/favicon.png" "${output_dir}"
+# INIT
+efsh_init() {
+    # generate default efshrc
+    cat > efshrc << _end_
+# NOTE: this is effectively a bash script. You could technically put anything
+# here you want to run at the very beginning of efsh2 execution (after default
+# variables have been set).
 
-echo "DONE. [$(timer ${CPY_T})]"
+#EFSH_AUTHOR="Some Body"
+#EFSH_EMAIL="somebody@someplace.com"
+#EFSH_BASE_URL="https://someplace.com"
+#EFSH_DATE_CMD=date
+#EFSH_SRC_DIR=\$PWD/src
+#EFSH_BUILD_DIR=\$PWD/build
+#EFSH_BUILD_DIR=\$PWD/build
+#EFSH_LASTGEN=\$PWD/.lastgen
+#EFSH_EXT=(".md" ".adoc" ".css" ".js" ".gif" ".jpg" ".jpeg" ".png" ".svg" ".html" ".blogindex" ".rssatom" ".siteindex" ".xcf" ".txt" ".ttf" ".bfxrsound" ".wav")
+#EFSH_EXT_HANDLERS=(pandoc asciidoctor copy copy copy copy copy copy copy copy blogindex rssatom siteindex copy copy copy copy copy)
+#EFSH_TMPL_HEAD=\$PWD/tmpl_head.html
+#EFSH_TMPL_TAIL=\$PWD/tmpl_tail.html
+#EFSH_TMPL_IHEAD=\$PWD/tmpl_ihead.html
+#EFSH_TMPL_ITAIL=\$PWD/tmpl_itail.html
+#EFSH_TMPL_RSS=\$PWD/tmpl_rss.xml
+#EFSH_TMPL_ATOM=\$PWD/tmpl_atom.xml
+_end_
+
+    # generate default templates, if they don't exist
+    # HEAD
+    cat > "$EFSH_TMPL_HEAD" << _end_
+<!DOCTYPE html>
+<html lang='en'>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+
+        <title>{{title}}</title>
+
+        <link href="./" rel="home start" />
+        <link href="/atom.xml" type="application/atom+xml" rel="alternate" title="Atom Feed" />
+        <link href="/rss.xml" type="application/rss+xml" rel="alternate" title="RSS Feed" />
+    </head>
+    <body>
+_end_
+    # TAIL
+    cat > "$EFSH_TMPL_TAIL" << _end_
+    </body>
+</html>
+_end_
+
+    # IHEAD
+    cat > "$EFSH_TMPL_IHEAD" << _end_
+<!DOCTYPE html>
+<html lang='en'>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+
+        <title>{{title}}</title>
+
+        <link href="./" rel="home start" />
+        <link href="/atom.xml" type="application/atom+xml" rel="alternate" title="Atom Feed" />
+        <link href="/rss.xml" type="application/rss+xml" rel="alternate" title="RSS Feed" />
+    </head>
+    <body>
+_end_
+    # ITAIL
+    cat > "$EFSH_TMPL_ITAIL" << _end_
+    </body>
+</html>
+_end_
 
 
-echo "Build Completed. [$(timer ${BUILD_T})]"
+    # RSS
+    cat > "$EFSH_TMPL_RSS" << _end_
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+<channel>
+    <title>A Site.</title>
+    <description></description>
+    <language>en</language>
+    <link>https://someplace.com</link>
+    <atom:link href="https://someplace.com/rss.xml" rel="self" type="application/rss+xml" />
+{{items}}
+</channel>
+</rss>
+_end_
+    # ATOM
+    cat > "$EFSH_TMPL_ATOM" << _end_
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+    <title>A Site.</title>
+    <subtitle></subtitle>
+    <link href="https://someplace.com/atom.xml" rel="self" />
+    <link href="https://someplace.com" />
+    <id>http://someplace.com/</id>
+    <updated>{{updated}}</updated>
+{{entries}}
+</feed>
+_end_
+}
 
-# CHANGES
-# =======
-#
-# 0.0.2
-# -----
-# - added rss links to head
-# - adjusted some of the meta tags in head
-# - added favicon to template
-#
-# 0.0.1
-# -----
-# Initial release
-#
+# BUILD
+efsh_build() {
+    if [ ! -e $EFSH_SRC_DIR ] ; then
+        echo "$EFSH_SRC_DIR not found"
+        exit 1
+    fi
+
+    # make build directory if it doesn't exist
+    mkdir -p $EFSH_BUILD_DIR
+
+    # generate `find` search parameters for file names
+    local searchparams="\( "
+    for i in ${!EFSH_EXT[@]}; do
+        if [ "$i" -ne "0" ]; then
+            searchparams+=" -o "
+        fi
+        searchparams+="-name \*${EFSH_EXT[$i]}"
+    done
+    searchparams+=" \)"
+
+    # only generate files that are newer than the last build time
+    if [ -e "$EFSH_LASTGEN" ] ; then
+        local names=$(eval "find $EFSH_SRC_DIR $searchparams -newer \"$EFSH_LASTGEN\"")
+    else
+        local names=$(eval "find $EFSH_SRC_DIR $searchparams")
+    fi
+
+    for F in ${names[@]} ; do
+        srcrelpath=${F#$EFSH_SRC_DIR}
+        srcfolder=$(dirname $srcrelpath)
+        srcfilename=$(basename $srcrelpath)
+        srcfileext=${srcfilename##*.}
+        srcfilename=${srcfilename%.*}
+        for H in ${!EFSH_EXT[@]}; do
+            if [ "${EFSH_EXT[$H]}" = ".$srcfileext" ] ; then
+                eval "efsh_build_handler_${EFSH_EXT_HANDLERS[$H]} \"$srcfolder\" \"$srcfilename\" \"$srcfileext\""
+            fi
+        done
+    done
+
+    echo -n "$($EFSH_DATE_CMD)" >> "$EFSH_LASTGEN"
+
+    echo "[build] All done."
+}
+
+
+
+
+
+efsh_loadconfig
+case $1 in
+    build)
+        # touch so they get checked to see if they need
+        # rebuilding every time (will be skipped if no blog entries change)
+        touch $EFSH_SRC_DIR/blog/index.blogindex
+        touch $EFSH_SRC_DIR/blog/xml.rssatom
+
+        efsh_build
+        ;;
+    fresh)
+        rm -f "$EFSH_LASTGEN"
+        rm -rf "$EFSH_BUILD_DIR/*"
+
+        efsh_build
+        ;;
+    init)
+        efsh_init
+        ;;
+    help)
+        efsh_help
+        ;;
+    *)
+        efsh_help
+        ;;
+esac

@@ -1,0 +1,20 @@
+# NOTE: this is effectively a bash script. You could technically put anything
+# here you want to run at the very beginning of efsh2 execution (after default
+# variables have been set).
+
+EFSH_AUTHOR="Some Body"
+EFSH_EMAIL="somebody@someplace"
+EFSH_BASE_URL="https://someplace.com"
+EFSH_DATE_CMD=gdate
+#EFSH_SRC_DIR=\$PWD/src
+#EFSH_BUILD_DIR=\$PWD/build
+#EFSH_BUILD_DIR=\$PWD/build
+#EFSH_LASTGEN=\$PWD/.lastgen
+#EFSH_EXT=(".md" ".adoc" ".css" ".js" ".gif" ".jpg" ".jpeg" ".png" ".svg" ".html" ".blogindex" ".rssatom" ".siteindex" ".xcf" ".txt" ".ttf" ".bfxrsound" ".wav")
+#EFSH_EXT_HANDLERS=(pandoc asciidoctor copy copy copy copy copy copy copy copy blogindex rssatom siteindex copy copy copy copy copy)
+#EFSH_TMPL_HEAD=\$PWD/tmpl_head.html
+#EFSH_TMPL_TAIL=\$PWD/tmpl_tail.html
+#EFSH_TMPL_IHEAD=\$PWD/tmpl_ihead.html
+#EFSH_TMPL_ITAIL=\$PWD/tmpl_itail.html
+#EFSH_TMPL_RSS=\$PWD/tmpl_rss.xml
+#EFSH_TMPL_ATOM=\$PWD/tmpl_atom.xml

@@ -1,0 +1,5 @@
+        <p>
+            Just some html that gets copied to a file that has the site index header
+            and footer wrapped around it.
+        </p>
+        <a href='/blog'>Here's a link to the blog portion of the site</a>
