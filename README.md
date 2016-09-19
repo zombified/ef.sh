@@ -1,6 +1,9 @@
 # ef.sh
 
-This is a bash utility for generating my personal site at [joelkleier.com](https://joelkleier.com).
+This is a bash utility intended to facilitate the generate of a static website,
+the motivation to use this to generate [joelkleier.com](https://joelkleier.com),
+but the tool _is_ general enough that with some light modifications (or
+improvements) it could be used for other sites too.
 
 Version 2.x is significantly different than veersion 1.x -- take a look at the
 [1.x branch](https://github.com/zombified/ef.sh/tree/1.x) if you're curious how
