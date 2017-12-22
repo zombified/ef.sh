@@ -7,7 +7,8 @@ EFSH_VERSION=2.0.0
 efsh_get_yaml_frontmatter() {
     local infile=$1
 
-    local yaml=$(cat $infile | sed -n -e '/---/,/---/p' | tail -n +2 | sed \$d)
+    #local yaml=$(cat $infile | sed -n -e '/---/,/---/p' | tail -n +2 | sed \$d)
+    local yaml=$(cat $infile | python -c 'exec("import sys\na=sys.stdin.readlines()\nfor l in a[1:]:\n\tif l.strip() == \"---\":\n\t\tsys.exit(0)\n\tprint l.strip()")')
 
     echo "$yaml"
 }
@@ -183,7 +184,7 @@ efsh_build_handler_blogindex() {
         local newnames=$(eval "find $EFSH_SRC_DIR/$fixed1/ \( -name *.md -o -name *.adoc \) -newer \"$EFSH_LASTGEN\"")
         local cntnn=0
         for NN in ${newnames[@]} ; do
-            cntnn+=1
+            cntnn=$((cntnn + 1))
         done
         if [ "$cntnn" -le "0" ] ; then
             echo "[building (blog index)] nothing changed, nothing to build."
@@ -195,6 +196,7 @@ efsh_build_handler_blogindex() {
     local blogentries=$(find $EFSH_SRC_DIR/$fixed1/ \( -name *.md -o -name *.adoc \) | sort -r)
     local output=""
     for F in ${blogentries[@]} ; do
+        #echo "- processing: $F"
         local frelpath=${F#$EFSH_SRC_DIR}
         local ffolder=$(dirname $frelpath)
         local ffilename=$(basename $frelpath)
@@ -238,7 +240,7 @@ efsh_build_handler_rssatom() {
         local newnames=$(eval "find $EFSH_SRC_DIR/$fixed1/ \( -name *.md -o -name *.adoc \) -newer \"$EFSH_LASTGEN\"")
         local cntnn=0
         for NN in ${newnames[@]} ; do
-            cntnn+=1
+            cntnn=$((cntnn + 1))
         done
         if [ "$cntnn" -le "0" ] ; then
             echo "[building (rss/atom)] nothing changed, nothing to build."
@@ -251,6 +253,7 @@ efsh_build_handler_rssatom() {
     local outputrss=""
     local outputatom=""
     for F in ${blogentries[@]} ; do
+        #echo "- processing: $F"
         local frelpath=${F#$EFSH_SRC_DIR}
         local ffolder=$(dirname $frelpath)
         local ffilename=$(basename $frelpath)
