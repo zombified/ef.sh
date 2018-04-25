@@ -75,6 +75,10 @@ efsh_check_handler_rssatom() {
     return 0
 }
 
+efsh_check_handler_jsonfeed() {
+    return 0
+}
+
 efsh_check_handler_siteindex() {
     return 0
 }
@@ -285,6 +289,64 @@ efsh_build_handler_rssatom() {
 # $1 == source directory
 # $2 == source filename (without extension)
 # $3 == source extension
+efsh_build_handler_jsonfeed() {
+    local fixed1=$1
+    fixed1="${fixed1:1:${#fixed1}-1}"
+    local infile="$EFSH_SRC_DIR/$fixed1/$2.$3"
+    local outdir="$EFSH_BUILD_DIR"
+    local outfile_json="$outdir/feed.json"
+    mkdir -p "$outdir"
+
+    if [ -e "$EFSH_LASTGEN" ] ; then
+        local newnames=$(eval "find $EFSH_SRC_DIR/$fixed1/ \( -name *.md -o -name *.adoc \) -newer \"$EFSH_LASTGEN\"")
+        local cntnn=0
+        for NN in ${newnames[@]} ; do
+            cntnn=$((cntnn + 1))
+        done
+        if [ "$cntnn" -le "0" ] ; then
+            echo "[building (json feed)] nothing changed, nothing to build."
+            return 0
+        fi
+    fi
+
+    echo "[building (json feed)] feed.json"
+    local blogentries=$(find $EFSH_SRC_DIR/$fixed1/ \( -name *.md -o -name *.adoc \) | sort -r)
+    local outputjson="["
+    local cntr=0
+    for F in ${blogentries[@]} ; do
+        #echo "- processing: $F"
+        local frelpath=${F#$EFSH_SRC_DIR}
+        local ffolder=$(dirname $frelpath)
+        local ffilename=$(basename $frelpath)
+        local ffileext=${ffilename##*.}
+        local ffilename=${ffilename%.*}
+
+        local yamlfront=$(efsh_get_yaml_frontmatter "$F")
+        local posttitle=$(echo "$yamlfront" | shyaml get-value title)
+        local postdate_fromfile=$(echo "$yamlfront" | shyaml get-value date | tr -d '\n')
+        postdate_fromfile=$(efsh_format_date "$postdate_fromfile")
+        # note, the '-R' is for --rfc-2822, which is a gnu date option
+        local postdate_json=$($EFSH_DATE_CMD -d "$postdate_fromfile" --rfc-3339='date')
+        local postdesc=$(echo "$yamlfront" | shyaml get-value description)
+        local postdesc_esc=${postdesc//\"/\\\\\"}
+
+        if [ "$cntr" -gt "0" ] ; then
+            outputjson+=","
+        fi
+        cntr=$(($cntr+1))
+
+        outputjson+="{\"id\":\"${EFSH_BASE_URL}/blog/${ffilename}\",\"url\":\"${EFSH_BASE_URL}/blog/${ffilename}\",\"title\":\"${posttitle}\",\"content_html\":\"${postdesc_esc}\",\"date_published\":\"${postdate_json}\"}"
+    done
+    outputjson+="]"
+
+    # note: need to use non '/' in sed since output's will have them
+    local jsonfeed=$(cat "$EFSH_TMPL_JSONFEED" | sed -e 's|{{items}}|'"${outputjson}"'|g')
+    echo "$jsonfeed" > "$outfile_json"
+}
+
+# $1 == source directory
+# $2 == source filename (without extension)
+# $3 == source extension
 efsh_build_handler_siteindex() {
     local fixed1=$1
     fixed1="${fixed1:1:${#fixed1}-1}"
@@ -321,14 +383,15 @@ efsh_loadconfig() {
     EFSH_SRC_DIR=$PWD/src
     EFSH_BUILD_DIR=$PWD/build
     EFSH_LASTGEN=$PWD/.lastgen
-    EFSH_EXT=(".md" ".adoc" ".css" ".js" ".gif" ".jpg" ".jpeg" ".png" ".svg" ".html" ".blogindex" ".rssatom" ".siteindex")
-    EFSH_EXT_HANDLERS=(pandoc asciidoctor copy copy copy copy copy copy copy copy blogindex rssatom siteindex)
+    EFSH_EXT=(".md" ".adoc" ".css" ".js" ".gif" ".jpg" ".jpeg" ".png" ".svg" ".html" ".blogindex" ".rssatom" ".jsonfeed" ".siteindex")
+    EFSH_EXT_HANDLERS=(pandoc asciidoctor copy copy copy copy copy copy copy copy blogindex rssatom jsonfeed siteindex)
     EFSH_TMPL_HEAD=$PWD/tmpl_head.html
     EFSH_TMPL_TAIL=$PWD/tmpl_tail.html
     EFSH_TMPL_IHEAD=$PWD/tmpl_ihead.html
     EFSH_TMPL_ITAIL=$PWD/tmpl_itail.html
     EFSH_TMPL_RSS=$PWD/tmpl_rss.xml
     EFSH_TMPL_ATOM=$PWD/tmpl_atom.xml
+    EFSH_TMPL_JSONFEED=$PWD/tmpl_jsonfeed.json
 
     # load local config
     if [ -e "$PWD/efshrc" ] ; then
@@ -381,14 +444,15 @@ efsh_init() {
 #EFSH_BUILD_DIR=\$PWD/build
 #EFSH_BUILD_DIR=\$PWD/build
 #EFSH_LASTGEN=\$PWD/.lastgen
-#EFSH_EXT=(".md" ".adoc" ".css" ".js" ".gif" ".jpg" ".jpeg" ".png" ".svg" ".html" ".blogindex" ".rssatom" ".siteindex")
-#EFSH_EXT_HANDLERS=(pandoc asciidoctor copy copy copy copy copy copy copy copy blogindex rssatom siteindex)
+#EFSH_EXT=(".md" ".adoc" ".css" ".js" ".gif" ".jpg" ".jpeg" ".png" ".svg" ".html" ".blogindex" ".rssatom" ".jsonfeed" ".siteindex")
+#EFSH_EXT_HANDLERS=(pandoc asciidoctor copy copy copy copy copy copy copy copy blogindex rssatom jsonfeed siteindex)
 #EFSH_TMPL_HEAD=\$PWD/tmpl_head.html
 #EFSH_TMPL_TAIL=\$PWD/tmpl_tail.html
 #EFSH_TMPL_IHEAD=\$PWD/tmpl_ihead.html
 #EFSH_TMPL_ITAIL=\$PWD/tmpl_itail.html
 #EFSH_TMPL_RSS=\$PWD/tmpl_rss.xml
 #EFSH_TMPL_ATOM=\$PWD/tmpl_atom.xml
+#EFSH_TMPL_JSONFEED=\$PWD/tmpl_jsonfeed.json
 _end_
 
     # generate default templates, if they don't exist
@@ -406,6 +470,7 @@ _end_
         <link href="./" rel="home start" />
         <link href="/atom.xml" type="application/atom+xml" rel="alternate" title="Atom Feed" />
         <link href="/rss.xml" type="application/rss+xml" rel="alternate" title="RSS Feed" />
+        <link href="/feed.json" type="application/json" rel="alternate" title="JSON Feed" />
     </head>
     <body>
 _end_
@@ -429,6 +494,7 @@ _end_
         <link href="./" rel="home start" />
         <link href="/atom.xml" type="application/atom+xml" rel="alternate" title="Atom Feed" />
         <link href="/rss.xml" type="application/rss+xml" rel="alternate" title="RSS Feed" />
+        <link href="/feed.json" type="application/json" rel="alternate" title="JSON Feed" />
     </head>
     <body>
 _end_
@@ -465,6 +531,18 @@ _end_
     <updated>{{updated}}</updated>
 {{entries}}
 </feed>
+_end_
+    # JSONFEED
+    cat > "$EFSH_TMPL_JSONFEED" << _end_
+{
+    "user_comment": "This feed allows you to view all the posts from this site in a feed reader that supports the JSON Feed format. To add this feed to your reader, copy the following URL: https://someplace.com/feed.json",
+
+    "version": "https://jsonfeed.org/version/1",
+    "title": "A Site.",
+    "home_page_url": "https://sompleace.com",
+    "feed_url": "https://someplace.com/feed.json",
+    "items": {{items}}
+}
 _end_
 }
 
@@ -524,6 +602,7 @@ case $1 in
         # rebuilding every time (will be skipped if no blog entries change)
         touch $EFSH_SRC_DIR/blog/index.blogindex
         touch $EFSH_SRC_DIR/blog/xml.rssatom
+        touch $EFSH_SRC_DIR/blog/json.jsonfeed
 
         efsh_build
         ;;
