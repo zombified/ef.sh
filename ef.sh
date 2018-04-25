@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-EFSH_VERSION=2.0.0
+EFSH_VERSION=2.1.0
 
 
 # $1 file get yaml frontmatter from
