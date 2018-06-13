@@ -213,7 +213,7 @@ efsh_build_handler_blogindex() {
         postdate=$(efsh_format_date "$postdate")
         local postdesc=$(echo "$yamlfront" | shyaml get-value description)
 
-        output+="<p><img class='linkicon' src='/static/icons/blueprint_speak.svg' /><a href='./${ffilename}/'>(${postdate}) ${posttitle}</a></p>\n"
+        output+="<p><span class='iconwrapper'><span class='post icon'><i></i></span></span><a href='./${ffilename}/'>(${postdate}) ${posttitle}</a></p>\n"
         output+="<p class='info'>${postdesc}</p>"
     done
 
